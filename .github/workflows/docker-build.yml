@@ -1,9 +1,7 @@
 name: Build and Push Multi-Arch Image
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch
 
 env:
   REGISTRY: docker.io
