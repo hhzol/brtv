@@ -1,0 +1,13 @@
+services:
+  brtv:
+    image: brtv:latest
+    ports:
+      - "6600:6600"
+    volumes:
+      - ./cookies.json:/app/config/cookies.json:ro
+      - ./playlist.txt:/app/playlist.txt:ro
+      - ./channels.txt:/app/channels.txt:ro
+    environment:
+      PORT: "6600"
+    restart: unless-stopped
+    container_name: brtv

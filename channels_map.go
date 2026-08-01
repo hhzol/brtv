@@ -1,0 +1,12 @@
+// 频道 ID 映射表
+var channelIds = map[string]string{
+	"bjws":  "573ib1kp5nk92irinpumbo9krlb",
+	"btvwy": "54db6gi5vfj8r8q1e6r89imd64s",
+	"btvkj": "53bn9rlalq08lmb8nf8iadoph0b",
+	"btvys": "50mqo8t4n4e8gtarqr3orj9l93v",
+	"btvcj": "50e335k9dq488lb7jo44olp71f5",
+	"btvsh": "50j015rjrei9vmp3h8upblr41jf",
+	"btvqn": "53grctge7jb8aeamggnot6fve1o",
+	"btvxw": "53gpt1ephlp86eor6ahtkg5b2hf",
+	"kaku":  "55skfjq618b9kcq9tfjr5qllb7r",
+}
