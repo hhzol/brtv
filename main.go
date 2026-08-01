@@ -249,9 +249,9 @@ func handlePlaylistTxt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 设置为纯文本输出，不包含 Content-Disposition 触发下载
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Disposition", "attachment; filename=channels.txt")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, content)
 	fmt.Printf("Playlist (TXT) returned (host: %s)\n", r.Host)
@@ -264,9 +264,9 @@ func handlePlaylistM3u(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+	// 设置为纯文本输出，以便浏览器能够直接展示内容而不是下载文件
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Disposition", "attachment; filename=channels.m3u")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, content)
 	fmt.Printf("Playlist (M3U) returned (host: %s)\n", r.Host)
@@ -462,7 +462,23 @@ func main() {
 		fmt.Printf("Warning: Failed to initialize session: %v\n", err)
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { if r.URL.Path == "/playlist.txt" { handlePlaylistTxt(w, r) } else if r.URL.Path == "/playlist.m3u" || r.URL.Path == "/playlist" { handlePlaylistM3u(w, r) } else if r.URL.Path == "/" { if r.URL.Query().Get("id") != "" { handleResolver(w, r) } else { handlePlaylistM3u(w, r) } } else if strings.HasSuffix(r.URL.Path, ".ts") { handleTsProxy(w, r) } else { http.NotFound(w, r) } })
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/playlist.txt" {
+			handlePlaylistTxt(w, r)
+		} else if r.URL.Path == "/playlist.m3u" || r.URL.Path == "/playlist" {
+			handlePlaylistM3u(w, r)
+		} else if r.URL.Path == "/" {
+			if r.URL.Query().Get("id") != "" {
+				handleResolver(w, r)
+			} else {
+				handlePlaylistM3u(w, r)
+			}
+		} else if strings.HasSuffix(r.URL.Path, ".ts") {
+			handleTsProxy(w, r)
+		} else {
+			http.NotFound(w, r)
+		}
+	})
 
 	port := ":6600"
 	if envPort := os.Getenv("PORT"); envPort != "" {
@@ -474,4 +490,3 @@ func main() {
 		panic(err)
 	}
 }
-
