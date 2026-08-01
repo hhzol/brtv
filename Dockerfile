@@ -13,7 +13,13 @@ FROM alpine:3.18
 WORKDIR /app
 
 COPY --from=builder /build/brtv .
+COPY cookies.json .
+COPY playlist.txt .
+COPY channels.txt .
 
-EXPOSE 8080
+RUN mkdir -p /app/config && \
+    cp cookies.json /app/config/cookies.json
+
+EXPOSE 6600
 
 CMD ["./brtv"]
