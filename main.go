@@ -1,14 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"compress/gzip"
 	"crypto/md5"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
-	"math/rand"
+	"log"
+	"math/big"
+	mathrand "math/rand"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -20,16 +29,22 @@ import (
 	"time"
 )
 
+const (
+	dataDir  = "./data"
+	certFile = "./data/server.crt"
+	keyFile  = "./data/server.key"
+)
+
 var channelIds = map[string]string{
-	"bjws":  "573ib1kp5nk92irinpumbo9krlb",
-	"btvwy": "54db6gi5vfj8r8q1e6r89imd64s",
-	"btvkj": "53bn9rlalq08lmb8nf8iadoph0b",
-	"btvys": "50mqo8t4n4e8gtarqr3orj9l93v",
-	"btvcj": "50e335k9dq488lb7jo44olp71f5",
-	"btvsh": "50j015rjrei9vmp3h8upblr41jf",
-	"btvqn": "53grctge7jb8aeamggnot6fve1o",
-	"btvxw": "53gpt1ephlp86eor6ahtkg5b2hf",
-	"kaku":  "55skfjq618b9kcq9tfjr5qllb7r",
+	"bjws":  "573ib1kp5nk92irinpumbo9krlb", // 北京卫视
+	"btvxw": "53gpt1ephlp86eor6ahtkg5b2hf", // 北京新闻
+	"btvty": "54hv0f3pq079d4oiil2k12dkvsc", // 北京体育休闲
+	"btvwy": "54db6gi5vfj8r8q1e6r89imd64s", // 北京文艺
+	"btvkj": "53bn9rlalq08lmb8nf8iadoph0b", // 北京纪实科教
+	"btvys": "50mqo8t4n4e8gtarqr3orj9l93v", // 北京影视
+	"btvcj": "50e335k9dq488lb7jo44olp71f5", // 北京财经
+	"btvsh": "50j015rjrei9vmp3h8upblr41jf", // 北京生活
+	"kaku":  "55skfjq618b9kcq9tfjr5qllb7r", // 卡酷少儿
 }
 
 type CookieConfig struct {
@@ -57,8 +72,6 @@ type APIResponse struct {
 }
 
 var globalClient *http.Client
-var currentM3U8URL string
-var currentStreamHost string
 
 func init() {
 	jar, _ := cookiejar.New(nil)
@@ -69,6 +82,7 @@ func init() {
 			KeepAlive: 30 * time.Second,
 		}).Dial,
 		TLSHandshakeTimeout: 15 * time.Second,
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 100,
 		DisableCompression:  false,
@@ -81,6 +95,73 @@ func init() {
 	}
 }
 
+// 🛡️ 自动检查与生成自签名 TLS 证书
+func generateCertIfNotExist() error {
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return fmt.Errorf("创建数据目录失败: %v", err)
+	}
+
+	_, errCert := os.Stat(certFile)
+	_, errKey := os.Stat(keyFile)
+	if errCert == nil && errKey == nil {
+		log.Println("[TLS] 证书与私钥校验通过，跳过生成步骤。")
+		return nil
+	}
+
+	log.Println("[TLS] 未找到证书，正在自动生成 10 年期的局域网自签名 TLS 证书...")
+
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return fmt.Errorf("生成私钥失败: %v", err)
+	}
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject: pkix.Name{
+			Organization: []string{"IPTV Local Server"},
+			CommonName:   "IPTV TLS Server",
+		},
+		NotBefore:             time.Now().Add(-10 * time.Minute),
+		NotAfter:              time.Now().AddDate(10, 0, 0),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+	}
+
+	if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				if ipnet.IP.To4() != nil {
+					template.IPAddresses = append(template.IPAddresses, ipnet.IP)
+				}
+			}
+		}
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		return fmt.Errorf("生成证书失败: %v", err)
+	}
+
+	certOut, err := os.Create(certFile)
+	if err != nil {
+		return fmt.Errorf("保存 cert 失败: %v", err)
+	}
+	defer certOut.Close()
+	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+
+	keyOut, err := os.Create(keyFile)
+	if err != nil {
+		return fmt.Errorf("保存 key 失败: %v", err)
+	}
+	defer keyOut.Close()
+	pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
+
+	log.Println("[TLS] 自签名证书成功生成并保存在目录:", dataDir)
+	return nil
+}
+
 func buildBtimeURL(id string, typeID int, from string) string {
 	secret := "TtJSg@2g*$K4PjUH"
 	timestamp := time.Now().Unix()
@@ -89,11 +170,11 @@ func buildBtimeURL(id string, typeID int, from string) string {
 	hash := md5.Sum([]byte(rawSig))
 	sign := hex.EncodeToString(hash[:])[:8]
 
-	cbRand1 := rand.Int63n(900000000000000000) + 100000000000000000
-	cbRand2 := rand.Intn(90) + 10
+	cbRand1 := mathrand.Int63n(900000000000000000) + 100000000000000000
+	cbRand2 := mathrand.Intn(90) + 10
 	callback := fmt.Sprintf("jQuery%d_%d%d", cbRand1, timestamp, cbRand2)
 
-	_rand := fmt.Sprintf("%d%d", timestamp, rand.Intn(90)+10)
+	_rand := fmt.Sprintf("%d%d", timestamp, mathrand.Intn(90)+10)
 
 	params := url.Values{}
 	params.Set("from", from)
@@ -158,16 +239,19 @@ func initSession() error {
 }
 
 func setCommonHeaders(req *http.Request) {
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 	req.Header.Set("DNT", "1")
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Upgrade-Insecure-Requests", "1")
 }
 
+// 🛡️ 安全解压函数：判断魔数，只有确定是 Gzip 才解压，避免非 Gzip 数据报错
 func decompressGzip(data []byte) ([]byte, error) {
-	reader, err := gzip.NewReader(strings.NewReader(string(data)))
+	if len(data) < 2 || data[0] != 0x1f || data[1] != 0x8b {
+		return data, nil
+	}
+	reader, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return data, nil
 	}
@@ -208,29 +292,6 @@ func processStreamURL(s string) string {
 
 var jsonpRegex = regexp.MustCompile(`\(([\{\[].*[\}\]])\)\s*;?$`)
 
-func rewriteM3U8(m3u8Content string, proxyHost string) string {
-	lines := strings.Split(m3u8Content, "\n")
-	var result []string
-
-	for _, line := range lines {
-		if strings.HasSuffix(strings.TrimSpace(line), ".ts") || strings.Contains(line, ".ts?") {
-			if strings.HasPrefix(line, "http") {
-				parts := strings.Split(line, "/")
-				filename := parts[len(parts)-1]
-				newURL := fmt.Sprintf("http://%s/%s", proxyHost, filename)
-				fmt.Printf("Rewriting TS URL: %s -> %s\n", line, newURL)
-				result = append(result, newURL)
-			} else {
-				result = append(result, line)
-			}
-		} else {
-			result = append(result, line)
-		}
-	}
-
-	return strings.Join(result, "\n")
-}
-
 func loadPlaylist(filename string, r *http.Request) (string, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -242,6 +303,7 @@ func loadPlaylist(filename string, r *http.Request) (string, error) {
 	return content, nil
 }
 
+// 输出单行 txt 订阅，返回纯净播放链接
 func handlePlaylistTxt(w http.ResponseWriter, r *http.Request) {
 	content, err := loadPlaylist("./channels.txt", r)
 	if err != nil {
@@ -249,14 +311,13 @@ func handlePlaylistTxt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 设置为纯文本输出，不包含 Content-Disposition 触发下载
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, content)
-	fmt.Printf("Playlist (TXT) returned (host: %s)\n", r.Host)
 }
 
+// 输出 M3U 订阅，返回标准干净的链接（由后端统一处理代理）
 func handlePlaylistM3u(w http.ResponseWriter, r *http.Request) {
 	content, err := loadPlaylist("./playlist.txt", r)
 	if err != nil {
@@ -264,16 +325,21 @@ func handlePlaylistM3u(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 设置为纯文本输出，以便浏览器能够直接展示内容而不是下载文件
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, content)
-	fmt.Printf("Playlist (M3U) returned (host: %s)\n", r.Host)
 }
 
+// ---------------------------------------------------------
+// 核心修改：拿到流地址后，代调并重写 M3U8 内的相对路径为完整 CDN 链接
+// ---------------------------------------------------------
 func handleResolver(w http.ResponseWriter, r *http.Request) {
 	idKey := r.URL.Query().Get("id")
+	if strings.Contains(idKey, "|") {
+		idKey = strings.Split(idKey, "|")[0]
+	}
+
 	gid, exists := channelIds[idKey]
 	if !exists {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
@@ -287,19 +353,13 @@ func handleResolver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("Request URL: %s\n", apiURL)
-
 	setCommonHeaders(req)
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Origin", "https://www.btime.com")
 	req.Header.Set("Referer", "https://www.btime.com/")
-	req.Header.Set("Sec-Fetch-Site", "same-site")
-	req.Header.Set("Sec-Fetch-Mode", "cors")
-	req.Header.Set("Sec-Fetch-Dest", "empty")
 
 	resp, err := globalClient.Do(req)
 	if err != nil {
-		fmt.Printf("Request error: %v\n", err)
 		http.Error(w, "API fetch failed", http.StatusBadGateway)
 		return
 	}
@@ -307,14 +367,14 @@ func handleResolver(w http.ResponseWriter, r *http.Request) {
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Read body error: %v\n", err)
 		http.Error(w, "API fetch failed", http.StatusBadGateway)
 		return
 	}
 
+	// 1. 解压 API 返回的 JSONP 数据
 	bodyBytes, _ = decompressGzip(bodyBytes)
-	fmt.Printf("API Response: %s\n", string(bodyBytes))
 
+	// 2. 正开提取 JSON
 	matches := jsonpRegex.FindSubmatch(bodyBytes)
 	if len(matches) < 2 {
 		http.Error(w, "Bad JSONP", http.StatusBadGateway)
@@ -323,22 +383,16 @@ func handleResolver(w http.ResponseWriter, r *http.Request) {
 
 	var payload APIResponse
 	if err := json.Unmarshal(matches[1], &payload); err != nil {
-		fmt.Printf("JSON parse error: %v\n", err)
 		http.Error(w, "API error", http.StatusBadGateway)
 		return
 	}
 
-	if payload.Errno != 0 {
-		fmt.Printf("API errno: %d\n", payload.Errno)
-		http.Error(w, "API error", http.StatusBadGateway)
-		return
-	}
-
-	if len(payload.Data.VideoStream) == 0 {
+	if payload.Errno != 0 || len(payload.Data.VideoStream) == 0 {
 		http.Error(w, "No streams", http.StatusNotFound)
 		return
 	}
 
+	// 3. 解密 base64 得到原生的 M3U8 链接
 	var streamURL string
 	for _, st := range payload.Data.VideoStream {
 		if st.StreamURL == "" {
@@ -355,101 +409,75 @@ func handleResolver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("Decoded stream URL: %s\n", streamURL)
-
-	proxyReq, err := http.NewRequest("GET", streamURL, nil)
+	// ------------------------------------------------------------------
+	// 由 Go 服务带 Cookie 和 Referer 请求真实的 M3U8 文本
+	// ------------------------------------------------------------------
+	m3u8Req, err := http.NewRequest("GET", streamURL, nil)
 	if err != nil {
-		http.Error(w, "Proxy failed", http.StatusBadGateway)
+		http.Error(w, "Failed to create stream request", http.StatusInternalServerError)
+		return
+	}
+	setCommonHeaders(m3u8Req)
+	m3u8Req.Header.Set("Referer", "https://www.btime.com/")
+
+	m3u8Resp, err := globalClient.Do(m3u8Req)
+	if err != nil || m3u8Resp.StatusCode != http.StatusOK {
+		http.Error(w, "Failed to fetch stream from BTime", http.StatusBadGateway)
+		return
+	}
+	defer m3u8Resp.Body.Close()
+
+	m3u8Body, err := io.ReadAll(m3u8Resp.Body)
+	if err != nil {
+		http.Error(w, "Read M3U8 content failed", http.StatusInternalServerError)
 		return
 	}
 
-	setCommonHeaders(proxyReq)
-	proxyReq.Header.Set("Referer", "https://www.btime.com/")
-	proxyReq.Header.Set("Origin", "https://www.btime.com")
+	// ------------------------------------------------------------------
+	// 关键改动点：解析出原 M3U8 的 Base URL，将所有相对切片地址修正为绝对路径
+	// ------------------------------------------------------------------
+	parsedStreamURL, err := url.Parse(streamURL)
+	if err == nil {
+		// 截取掉 URL 末尾的具体 m3u8 文件名，保留基础路径前缀
+		baseURL := parsedStreamURL.Scheme + "://" + parsedStreamURL.Host + parsedStreamURL.Path
+		if idx := strings.LastIndex(baseURL, "/"); idx != -1 {
+			baseURL = baseURL[:idx+1]
+		}
 
-	proxyResp, err := globalClient.Do(proxyReq)
-	if err != nil {
-		fmt.Printf("Stream fetch error: %v\n", err)
-		http.Error(w, "Stream fetch failed", http.StatusBadGateway)
-		return
-	}
-	defer proxyResp.Body.Close()
-
-	m3u8Data, err := io.ReadAll(proxyResp.Body)
-	if err != nil {
-		http.Error(w, "Failed to read M3U8", http.StatusBadGateway)
-		return
-	}
-
-	m3u8Content := string(m3u8Data)
-	fmt.Printf("M3U8 content length: %d\n", len(m3u8Content))
-
-	u, _ := url.Parse(streamURL)
-	currentStreamHost = u.Host
-	currentM3U8URL = streamURL
-
-	clientHost := r.Host
-	if r.Header.Get("X-Forwarded-For") != "" {
-		clientHost = r.Header.Get("X-Forwarded-For")
+		lines := strings.Split(string(m3u8Body), "\n")
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			// 排除空行、注释行（#EXTINF...等）以及已经是完整 http(s) 的绝对路径
+			if trimmed != "" && !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, "http://") && !strings.HasPrefix(trimmed, "https://") {
+				if strings.HasPrefix(trimmed, "/") {
+					// 针对以 / 开头的根路径相对地址
+					lines[i] = parsedStreamURL.Scheme + "://" + parsedStreamURL.Host + trimmed
+				} else {
+					// 针对同级相对路径（如 btv_sn_...ts）
+					lines[i] = baseURL + trimmed
+				}
+			}
+		}
+		m3u8Body = []byte(strings.Join(lines, "\n"))
 	}
 
-	m3u8Content = rewriteM3U8(m3u8Content, clientHost)
-
+	// 将修复完相对路径后的 M3U8 文本返回给播放器
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, m3u8Content)
-
-	fmt.Printf("M3U8 rewritten and returned\n")
-}
-
-func handleTsProxy(w http.ResponseWriter, r *http.Request) {
-	filename := r.URL.Path[1:]
-	queryString := r.URL.RawQuery
-
-	realURL := fmt.Sprintf("https://%s/live/%s", currentStreamHost, filename)
-	if queryString != "" {
-		realURL = fmt.Sprintf("%s?%s", realURL, queryString)
-	}
-
-	fmt.Printf("Proxying TS: %s\n", realURL)
-
-	proxyReq, err := http.NewRequest("GET", realURL, nil)
-	if err != nil {
-		http.Error(w, "Proxy failed", http.StatusBadGateway)
-		return
-	}
-
-	setCommonHeaders(proxyReq)
-	proxyReq.Header.Set("Referer", "https://www.btime.com/")
-	proxyReq.Header.Set("Origin", "https://www.btime.com")
-	proxyReq.Header.Set("Range", r.Header.Get("Range"))
-
-	proxyResp, err := globalClient.Do(proxyReq)
-	if err != nil {
-		fmt.Printf("TS fetch error: %v\n", err)
-		http.Error(w, "Failed to fetch TS", http.StatusBadGateway)
-		return
-	}
-	defer proxyResp.Body.Close()
-
-	for key, values := range proxyResp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
-
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.WriteHeader(proxyResp.StatusCode)
-
-	io.Copy(w, proxyResp.Body)
-	fmt.Printf("TS proxied successfully (status: %d)\n", proxyResp.StatusCode)
+	w.Write(m3u8Body)
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	mathrand.Seed(time.Now().UnixNano())
 
-	cookieFile := "/app/config/cookies.json"
+	// 1. 自动初始化局域网 HTTPS 证书
+	if err := generateCertIfNotExist(); err != nil {
+		fmt.Printf("Warning: Failed to generate TLS certificate: %v\n", err)
+	}
+
+	// 2. 默认调整为直接读取根目录下的 ./cookies.json
+	cookieFile := "./cookies.json"
 	if envFile := os.Getenv("COOKIES_FILE"); envFile != "" {
 		cookieFile = envFile
 	}
@@ -473,8 +501,6 @@ func main() {
 			} else {
 				handlePlaylistM3u(w, r)
 			}
-		} else if strings.HasSuffix(r.URL.Path, ".ts") {
-			handleTsProxy(w, r)
 		} else {
 			http.NotFound(w, r)
 		}
@@ -485,8 +511,13 @@ func main() {
 		port = ":" + envPort
 	}
 
-	fmt.Printf("Server is running on port %s...\n", strings.TrimPrefix(port, ":"))
-	if err := http.ListenAndServe(port, nil); err != nil {
-		panic(err)
+	// 优先启动 HTTPS 端口
+	fmt.Printf("Server is running on HTTPS port %s...\n", strings.TrimPrefix(port, ":"))
+	err := http.ListenAndServeTLS(port, certFile, keyFile, nil)
+	if err != nil {
+		fmt.Printf("TLS Server failed, fallback to HTTP: %v\n", err)
+		if err := http.ListenAndServe(port, nil); err != nil {
+			panic(err)
+		}
 	}
 }
