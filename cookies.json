@@ -1,22 +1,8 @@
 {
   "cookies": [
     {
-      "name": "__guid",
-      "value": "d4ae2045-a8e3-4df7-aefa-df2e1e3d7212",
-      "domain": ".btime.com",
-      "path": "/",
-      "secure": true
-    },
-    {
       "name": "usid",
-      "value": "ac221bbc49f686cde900921fcaa65673",
-      "domain": ".btime.com",
-      "path": "/",
-      "httpOnly": true
-    },
-    {
-      "name": "rand",
-      "value": "1379135973",
+      "value": "",
       "domain": ".btime.com",
       "path": "/",
       "httpOnly": true
@@ -29,17 +15,9 @@
     },
     {
       "name": "__lid",
-      "value": "9t896xxrqysePKFqnWjeYGsWTsu05ul39gz7y8W6b=",
+      "value": "",
       "domain": ".btime.com",
       "path": "/"
-    },
-    {
-      "name": "z_api_request_time",
-      "value": "0.067868947982788",
-      "domain": ".btime.com",
-      "path": "/",
-      "secure": true,
-      "httpOnly": true
     }
   ]
 }

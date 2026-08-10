@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>如何获取 BTime Cookie 值</title>
+    <style>
+        body { font-family: "Microsoft YaHei", sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background: #f9f9f9; }
+        h1 { color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        .step { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+        .step h2 { margin-top: 0; color: #007bff; }
+        .step p { margin: 10px 0; }
+        .step .note { background: #fff3cd; padding: 8px 12px; border-radius: 4px; border-left: 4px solid #ffc107; }
+        .back-link { display: inline-block; margin-top: 20px; padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+        .back-link:hover { background: #0056b3; }
+        .img-placeholder { background: #e9ecef; padding: 15px; border-radius: 6px; text-align: center; color: #6c757d; border: 1px dashed #adb5bd; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>📖 如何获取 BTime Cookie 值？</h1>
+    <p>按照以下步骤，从 <strong>北京时间 (btime.com)</strong> 网站获取 <code>usid</code> 和 <code>__lid</code> 的值。</p>
+
+    <div class="step">
+        <h2>第一步：打开网页并登录</h2>
+        <p>在浏览器中访问 <a href="https://www.btime.com" target="_blank">https://www.btime.com</a>，<strong>使用您的账号登录</strong>（如果尚未登录）。</p>
+        <img src="/help/static/step1.png" alt="第一步截图" style="max-width:100%; border:1px solid #ddd; border-radius:4px;">
+    </div>
+
+    <div class="step">
+        <h2>第二步：打开开发者工具</h2>
+        <p>在浏览器页面中按下 <kbd>F12</kbd> 键（或右键 → “检查” / “开发者工具”），然后切换到 <strong>“应用程序”</strong>（Application）标签。</p>
+        <img src="/help/static/step2.png" alt="第二步截图" style="max-width:100%; border:1px solid #ddd; border-radius:4px;">
+    </div>
+
+    <div class="step">
+        <h2>第三步：找到并复制 Cookie 值</h2>
+        <p>在左侧菜单中找到 <strong>“Cookie”</strong> → <strong>“https://www.btime.com”</strong>，在右侧列表中查找以下两项：</p>
+        <ul>
+            <li><code><strong>usid</strong></code> —— 复制其 <strong>值</strong>（一串字母数字）</li>
+            <li><code><strong>lid</strong></code> —— 复制其 <strong>值</strong>（注意：开发者工具中名称为 <code>lid</code>，但在本工具中对应的是 <code>__lid</code>，请粘贴到表单的 <strong>“__lid”</strong> 输入框）</li>
+        </ul>
+        <div class="note">💡 提示：您可能会看到多个类似的名称，请确保 <strong>域</strong> 为 <code>.btime.com</code>，并且 <strong>路径</strong> 为 <code>/</code>。</div>
+        <img src="/help/static/step3.png" alt="第三步截图" style="max-width:100%; border:1px solid #ddd; border-radius:4px;">
+    </div>
+
+    <div class="step">
+        <h2>第四步：粘贴到管理页面</h2>
+        <p>回到本服务的 <a href="/cookies">Cookie 管理页面</a>，将复制的 <code>usid</code> 和 <code>__lid</code> 值粘贴到对应的输入框中，点击 <strong>“保存”</strong> 即可。</p>
+        <img src="/help/static/step4.png" alt="第四步截图" style="max-width:100%; border:1px solid #ddd; border-radius:4px;">
+    </div>
+
+    <a href="/cookies" class="back-link">← 返回 Cookie 管理</a>
+</body>
+</html>

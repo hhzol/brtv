@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>管理 BTime Cookies</title>
+    <style>
+        body { font-family: sans-serif; margin: 40px; }
+        label { display: block; margin-bottom: 12px; }
+        input[type="text"] { width: 400px; padding: 6px; }
+        button { padding: 8px 20px; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>更新 BTime 认证 Cookie</h1>
+    {{if .Success}}<p class="success">✅ 保存成功！会话已更新。</p>{{end}}
+    <form method="POST">
+        <label>usid: <input type="text" name="usid" value="{{.Usid}}" required></label>
+        <label>__lid: <input type="text" name="lid" value="{{.Lid}}" required></label>
+        <button type="submit">保存</button>
+    </form>
+    <p>💡 修改后立即生效，无需重启服务。</p>
+    <p><a href="/help">📖 如何获取这些值？</a></p>
+</body>
+</html>

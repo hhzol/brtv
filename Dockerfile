@@ -19,6 +19,8 @@ COPY --from=builder /build/brtv .
 COPY cookies.json .
 COPY playlist.txt .
 COPY channels.txt .
+COPY cookies.html .
+COPY help/ ./help/
 
 # 依然建议预先创建好 data 目录，确保程序写证书时不会因目录不存在或权限问题报错
 RUN mkdir -p /app/data && chmod -R 755 /app
