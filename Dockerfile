@@ -1,29 +1,36 @@
+# 1. 编译阶段
 FROM golang:1.21-alpine AS builder
+
+# 预先安装证书、时区文件，并预建数据目录
+RUN apk add --no-cache ca-certificates tzdata && \
+    mkdir -p /build/data
 
 WORKDIR /build
 
-COPY main.go .
+# 优先复制依赖配置文件，提升 Docker 构建缓存利用率
 COPY go.mod go.sum* ./
+RUN go mod download
 
-RUN go mod tidy || true && \
-    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o brtv .
+COPY main.go .
 
-FROM alpine:3.18
+# -ldflags="-s -w": 剥离符号表与调试信息，极大缩减二进制体积
+# -trimpath: 移除代码绝对路径元数据
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o brtv .
 
-RUN apk --no-cache add ca-certificates tzdata
+# 2. 最终运行阶段 (完全空白镜像 scratch)
+FROM scratch
+
+# 从 builder 拷贝 SSL 证书、时区文件及预建好的 data 目录
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=builder /build/data /app/data
 
 WORKDIR /app
 
-# 一次性将所有必要文件（brtv 可执行文件、cookies.json、txt 模板）放到 /app 根目录
+# 复制 Go 编译产物及相关配置文件
 COPY --from=builder /build/brtv .
-COPY cookies.json .
-COPY playlist.txt .
-COPY channels.txt .
-COPY cookies.html .
+COPY cookies.json playlist.txt channels.txt cookies.html ./
 COPY help/ ./help/
-
-# 依然建议预先创建好 data 目录，确保程序写证书时不会因目录不存在或权限问题报错
-RUN mkdir -p /app/data && chmod -R 755 /app
 
 EXPOSE 6600
 
