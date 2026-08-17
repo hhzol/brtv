@@ -1,27 +1,27 @@
 #EXTM3U
 #EXTINF:-1 tvg-id="bjws" tvg-name="北京卫视",北京卫视
-https://${replace}/?id=bjws
+http://${replace}/?id=bjws
 
 #EXTINF:-1 tvg-id="btvwy" tvg-name="北京文艺",北京文艺
-https://${replace}/?id=btvwy
+http://${replace}/?id=btvwy
 
 #EXTINF:-1 tvg-id="btvkj" tvg-name="北京科教",北京科教
-https://${replace}/?id=btvkj
+http://${replace}/?id=btvkj
 
 #EXTINF:-1 tvg-id="btvys" tvg-name="北京影视",北京影视
-https://${replace}/?id=btvys
+http://${replace}/?id=btvys
 
 #EXTINF:-1 tvg-id="btvcj" tvg-name="北京财经",北京财经
-https://${replace}/?id=btvcj
+http://${replace}/?id=btvcj
 
 #EXTINF:-1 tvg-id="btvsh" tvg-name="北京生活",北京生活
-https://${replace}/?id=btvsh
+http://${replace}/?id=btvsh
 
 #EXTINF:-1 tvg-id="btvqn" tvg-name="北京新闻",北京新闻
-https://${replace}/?id=btvxw
+http://${replace}/?id=btvxw
 
 #EXTINF:-1 tvg-id="btvqn" tvg-name="北京体育休闲",北京体育休闲
-https://${replace}/?id=btvty
+http://${replace}/?id=btvty
 
 #EXTINF:-1 tvg-id="kaku" tvg-name="卡酷少儿",卡酷少儿
-https://${replace}/?id=kaku
+http://${replace}/?id=kaku

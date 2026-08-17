@@ -559,8 +559,8 @@ func main() {
 			port = envPort
 		}
 		fmt.Printf("\n⚠️  Cookie 未配置或无效！\n")
-		fmt.Printf("   请访问 https://%s:%s/cookies 填入 usid 和 __lid 的值。\n", displayIP, port)
-		// 如果未设置 HOST_IP，则显示提醒
+		// 提示链接改为 http:// 协议
+		fmt.Printf("   请访问 http://%s:%s/cookies 填入 usid 和 __lid 的值。\n", displayIP, port)
 		if os.Getenv("HOST_IP") == "" {
 			fmt.Printf("   （若从其他设备访问，请将 %s 替换为宿主机的实际 IP）\n", displayIP)
 		}
@@ -596,12 +596,10 @@ func main() {
 	if envPort := os.Getenv("PORT"); envPort != "" {
 		port = ":" + envPort
 	}
-	fmt.Printf("Server is running on HTTPS port %s...\n", strings.TrimPrefix(port, ":"))
-	err := http.ListenAndServeTLS(port, certFile, keyFile, nil)
-	if err != nil {
-		fmt.Printf("TLS Server failed, fallback to HTTP: %v\n", err)
-		if err := http.ListenAndServe(port, nil); err != nil {
-			panic(err)
-		}
+
+	// 启动纯 HTTP 服务，使得播放软件能够无障碍通过 http:// 访问
+	log.Printf("Server is running on HTTP port %s...\n", strings.TrimPrefix(port, ":"))
+	if err := http.ListenAndServe(port, nil); err != nil {
+		log.Fatalf("HTTP Server failed: %v", err)
 	}
 }
